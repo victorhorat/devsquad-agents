@@ -21,7 +21,7 @@ class CodeSubmission(BaseModel):
     notes: str = ""
 
 
-class TestExecutionResult(BaseModel):
+class ExecutionResult(BaseModel):
     """Resultado bruto de rodar o pytest gerado."""
 
     passed: bool
