@@ -4,9 +4,12 @@ import typer
 from rich.console import Console
 
 from devsquad.config import load_settings
+from devsquad.evals import run_all, summarize
 from devsquad.graph import GraphState
 from devsquad.llm.openai_client import OpenAICompatibleClient
 from devsquad.task import run_task
+
+EVALS_RESULTS_PATH = Path(__file__).resolve().parents[2] / "evals" / "results.md"
 
 app = typer.Typer(help="devsquad-agents: time de agentes de IA que gera código testado")
 console = Console()
@@ -92,9 +95,22 @@ def run(
 
 @app.command()
 def eval() -> None:
-    """Roda o benchmark de tarefas em evals/ e imprime a tabela de resultados."""
-    console.print("[yellow]`devsquad eval` ainda não foi implementado (fase 4).[/yellow]")
-    raise typer.Exit(code=1)
+    """Roda o benchmark de tarefas em evals/ e grava a tabela em evals/results.md."""
+    settings = load_settings()
+    llm = OpenAICompatibleClient(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+
+    outcomes = run_all(llm, settings)
+    for outcome in outcomes:
+        icon = "✅" if outcome.result.status == "approved" else "❌"
+        console.print(f"{icon} {outcome.task_name} ({outcome.result.iterations} iter)")
+
+    report = summarize(outcomes, model=settings.llm_model)
+    EVALS_RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    EVALS_RESULTS_PATH.write_text(report, encoding="utf-8")
+
+    console.print()
+    console.print(report)
+    console.print(f"[bold]Resultado gravado em {EVALS_RESULTS_PATH}[/bold]")
 
 
 if __name__ == "__main__":

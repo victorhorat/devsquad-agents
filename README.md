@@ -2,22 +2,35 @@
 
 > **EN summary:** A small multi-agent dev team (Refiner → Coder → QA) built with LangGraph that turns a natural-language task into tested Python code. Runs real pytest in an isolated subprocess, loops Coder↔QA until green, and works against any OpenAI-compatible LLM endpoint (Gemini free tier by default). Ships as a CLI and a FastAPI service, with eval benchmarks tracking success rate, iterations, tokens and latency.
 
-> ⚠️ **Rascunho de arquitetura para revisão — ainda não implementado.** Este README descreve o que vai ser construído. Seções marcadas com `[pendente]` serão preenchidas depois que o código e as evals existirem.
-
 ---
 
 ## 1. O que é
 
 Um "time de desenvolvimento" de agentes de IA: você descreve uma tarefa em português natural, e três agentes especializados (Refiner, Coder, QA) colaboram em loop até entregar código Python com testes reais passando.
 
-`[pendente: GIF/print do terminal rodando `devsquad run`]`
+```
+$ devsquad run "funcao que valida CPF brasileiro com digitos verificadores"
+
+Tarefa: funcao que valida CPF brasileiro com digitos verificadores
+
+🧭 Refiner (iter 0): Implement a function that validates Brazilian CPF numbers,
+correctly checking the verification digits.
+👩‍💻 Coder (iter 1): Implemented the standard CPF check algorithm, handling
+formatting, non‑string inputs, length checks, and the all‑equal‑digits rule.
+🔍 QA (iter 1): aprovado
+
+✅ Aprovado
+Iterações: 1
+Tokens totais: 3107
+Latência: 11.2s
+```
 
 ## 2. Por que existe
 
 Fiz este projeto para o meu portfólio de IA Generativa. Mas ele não é só uma demo: é a ferramenta que eu uso para construir os próximos dois projetos do portfólio, apontando o `--workspace` para as pastas deles.
 
-- `[pendente: link para o agente de pedidos de comida]`
-- `[pendente: link para o RAG de avaliações de restaurantes]`
+- `[em breve: link para o agente de pedidos de comida]`
+- `[em breve: link para o RAG de avaliações de restaurantes]`
 
 ## 3. Arquitetura
 
@@ -74,14 +87,22 @@ Coder → Test Runner → QA
 
 ## 4. Como rodar
 
-`[pendente — depende da Fase 1]`
-
 ```bash
 # instalação local (uv)
-uv sync
+uv sync --extra dev
 
 # variáveis de ambiente
 cp .env.example .env
+# edite .env com seu provedor (veja abaixo)
+
+# CLI
+uv run devsquad run "função que valida CPF com dígitos verificadores"
+
+# API (http://localhost:8000/docs)
+uv run uvicorn devsquad.api:app --reload
+
+# testes (não dependem de nenhuma API key, usam FakeLLM)
+uv run pytest -q
 ```
 
 ### Configuração de provedor (qualquer endpoint compatível com OpenAI)
@@ -97,11 +118,26 @@ CODER_MODEL=
 QA_MODEL=
 ```
 
-Exemplos de outros provedores oficiais: `[pendente — Gemini | Groq | OpenRouter | DeepSeek | Ollama local]`
+Exemplos de outros provedores oficiais compatíveis com OpenAI:
+
+| Provedor | `LLM_BASE_URL` | Exemplo de `LLM_MODEL` |
+|---|---|---|
+| Gemini (padrão, free tier) | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.0-flash` |
+| Groq (free tier) | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` |
+| OpenRouter (modelos `:free`) | `https://openrouter.ai/api/v1` | `meta-llama/llama-3.3-70b-instruct:free` |
+| DeepSeek (API oficial) | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| Ollama (local) | `http://localhost:11434/v1` | `llama3.1` |
+
+> Os nomes de modelo de provedores gratuitos mudam com frequência — confira a lista atual em `GET /v1/models` do provedor antes de rodar.
 
 ### Docker
 
-`[pendente — depende da Fase 3]`
+```bash
+docker compose up --build
+# API disponível em http://localhost:8000/docs
+```
+
+O `Dockerfile` é multi-stage: builda as dependências com `uv` num estágio e copia só o `.venv` + `src/` para a imagem final.
 
 ## 5. CLI e API
 
@@ -114,17 +150,53 @@ devsquad run "função que valida CPF com dígitos verificadores" \
   --max-iterations 3
 ```
 
+Grava `src/validators/cpf.py` e `src/validators/test_cpf.py` no workspace informado, só se o QA aprovar (ou sempre, com `--write-on-fail`).
+
 ### API
 
 - `POST /tasks` — `{ "task": "...", "max_iterations": 3 }` → resultado completo
 - `GET /health`
 - Swagger em `/docs`
 
-`[pendente: exemplos de request/response reais]`
+```bash
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"task": "função que valida CPF com dígitos verificadores", "max_iterations": 3}'
+```
+
+```json
+{
+  "status": "approved",
+  "code": "def validar_cpf(cpf: str) -> bool:\n    ...",
+  "tests": "from solution import validar_cpf\n\n\ndef test_cpf_valido():\n    ...",
+  "iterations": 1,
+  "history": [
+    {"agent": "refiner", "iteration": 0, "summary": "...", "prompt_tokens": 312, "completion_tokens": 180},
+    {"agent": "coder", "iteration": 1, "summary": "...", "prompt_tokens": 540, "completion_tokens": 410},
+    {"agent": "qa", "iteration": 1, "summary": "aprovado", "prompt_tokens": 120, "completion_tokens": 20}
+  ],
+  "total_tokens": 1582,
+  "latency_seconds": 11.2,
+  "written_to": null
+}
+```
 
 ## 6. Resultados das evals
 
-`[pendente — depende da Fase 4: tabela com taxa de sucesso, média de iterações, tokens, latência, modelo usado e data]`
+`devsquad eval` roda as tarefas de `src/devsquad/evals.py` de ponta a ponta e grava a tabela em `evals/results.md`. Último run real (sem nenhuma edição manual):
+
+**Resultados das evals (2026-11-04, modelo: `openai/gpt-oss-120b` via Groq)**
+
+Taxa de sucesso: **100%** (6/6) · Média de iterações até passar: **1.3** · Média de tokens por tarefa: **5288** · Média de latência por tarefa: **30.8s**
+
+| Tarefa | Status | Iterações | Tokens | Latência (s) |
+|---|---|---|---|---|
+| validar_cpf | ✅ | 2 | 6339 | 10.26 |
+| parse_preco_brl | ✅ | 2 | 10700 | 72.78 |
+| taxa_entrega | ✅ | 1 | 3146 | 23.46 |
+| agrupar_pedidos_por_restaurante | ✅ | 1 | 4011 | 26.58 |
+| paginar_lista | ✅ | 1 | 3676 | 24.17 |
+| validar_email | ✅ | 1 | 3858 | 27.82 |
 
 ## 7. Decisões técnicas e trade-offs
 
