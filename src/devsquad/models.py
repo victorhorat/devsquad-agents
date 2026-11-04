@@ -56,4 +56,5 @@ class TaskResult(BaseModel):
     iterations: int
     history: list[AgentLogEntry]
     total_tokens: int
+    latency_seconds: float = 0.0
     written_to: str | None = None

@@ -83,6 +83,7 @@ def run(
 
     console.print(f"Iterações: {result.iterations}")
     console.print(f"Tokens totais: {result.total_tokens}")
+    console.print(f"Latência: {result.latency_seconds}s")
     if result.written_to:
         console.print(f"Gravado em: {result.written_to}")
     elif workspace and module:

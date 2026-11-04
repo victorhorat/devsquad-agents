@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -26,11 +27,13 @@ def run_task(
         test_timeout_seconds=settings.test_timeout_seconds,
     )
 
+    started_at = time.monotonic()
     final_state = state
     for snapshot in graph.stream(state, stream_mode="values"):
         final_state = snapshot
         if on_step:
             on_step(final_state)
+    latency_seconds = time.monotonic() - started_at
 
     written_to = None
     should_write = final_state["status"] == "approved" or write_on_fail
@@ -46,6 +49,7 @@ def run_task(
         iterations=final_state["iteration"],
         history=final_state["history"],
         total_tokens=final_state["total_tokens"],
+        latency_seconds=round(latency_seconds, 3),
         written_to=written_to,
     )
 
