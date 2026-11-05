@@ -36,37 +36,16 @@ Fiz este projeto para o meu portfólio de IA Generativa. Mas ele não é só uma
 
 ## 3. Arquitetura
 
-O projeto tem dois modos, do mais simples ao mais completo. Os dois usam o mesmo motor por baixo (nenhum código duplicado): o modo completo só adiciona duas camadas em volta do modo simples.
+O projeto tem dois modos, do mais simples ao mais completo, documentados em blocos separados abaixo. Os dois usam o mesmo motor por baixo (nenhum código duplicado): o modo completo (3.2) só adiciona duas camadas em volta do modo simples (3.1).
 
 - **`devsquad run`** — um módulo por vez. Três agentes (Refiner, Coder, QA) em loop até o código passar nos testes de verdade.
-- **`devsquad build-feature`** *(modo completo, dá pra construir uma funcionalidade inteira)* — um Architect planeja vários módulos, cada um passa pelo loop acima sem nenhuma mudança, e um Integration QA testa os módulos juntos no final, corrigindo o módulo certo se algo não se encaixar.
+- **`devsquad build-feature`** *(modo completo, dá pra construir uma funcionalidade inteira)* — um Architect planeja vários módulos, cada um passa pelo loop do modo simples sem nenhuma mudança, e um Integration QA testa os módulos juntos no final, corrigindo o módulo certo se algo não se encaixar.
 
-### Visão geral — modo completo (`build-feature`)
+---
 
-```mermaid
-flowchart TD
-    Start([Feature em linguagem natural]) --> Architect
+### 3.1 Modo simples — `devsquad run`
 
-    Architect["🏛️ Architect\nlê README/contexto do workspace\nproduz um PLANO: lista ordenada de módulos\n+ dependências entre eles"]
-
-    Architect --> ModuleLoop
-
-    subgraph ModuleLoop["por módulo do plano, em ordem"]
-        direction TB
-        Inner["Refiner → Coder → QA\n(o mesmo loop do devsquad run, sem mudança)"]
-    end
-
-    ModuleLoop -->|todos os módulos aprovados| Integration
-
-    Integration["🔗 Integration QA\ngera um teste que importa os módulos\npelos nomes de arquivo reais, roda via pytest"]
-
-    Integration -->|passou| Done([✅ status: approved])
-    Integration -->|falhou, tentativas < MAX| Fix["Coder focado\n(só o módulo apontado,\ncom o feedback da falha de integração)"]
-    Fix --> Integration
-    Integration -->|falhou, tentativas == MAX| Partial([⚠️ status: partial])
-```
-
-### Visão geral — loop interno (`devsquad run`, e cada módulo do plano acima)
+**Visão geral**
 
 ```mermaid
 flowchart TD
@@ -87,16 +66,15 @@ flowchart TD
     Approve --> Write["💾 Grava código + testes\nno --workspace"]
 ```
 
-### Componentes do modo completo
+**Loop de autocorreção**
 
-| Componente | Responsabilidade |
-|---|---|
-| **Architect** | Recebe a feature + contexto do workspace (README + `--context-dir`) e produz um `Plan`: lista ordenada de módulos, cada um com sua tarefa e os contratos (assinaturas) que módulos anteriores do plano expõem. |
-| **Module Loop** | Roda o loop interno (Refiner→Coder→QA) uma vez por módulo do plano, na ordem de dependência. Cada módulo aprovado entra como contexto dos módulos seguintes. |
-| **Integration QA** | Só roda depois que todos os módulos passaram individualmente. Gera um teste de integração que importa os módulos pelos nomes de arquivo reais e roda via `pytest` (mesmo Test Runner, estendido pra múltiplos arquivos). Se falhar, aponta qual módulo é a causa raiz. |
-| **Fix (Coder focado)** | Reaproveita direto o Coder do módulo apontado, com o feedback do Integration QA — sem rodar o Refiner de novo nem refazer os outros módulos. |
+```
+Coder → Test Runner → QA
+          ↑               │
+          └── falhou ─────┘   (até MAX_ITERATIONS, padrão 3)
+```
 
-### Componentes do loop interno (por módulo)
+**Componentes**
 
 | Componente | Responsabilidade |
 |---|---|
@@ -107,15 +85,7 @@ flowchart TD
 | **LLM Client** | Cliente genérico compatível com OpenAI (`base_url` livre), com retry/backoff para 429/5xx, timeout, e parsing tolerante de JSON para respostas estruturadas quando o provedor não suporta `response_format`. Modelo configurável por agente. |
 | **Orquestrador (LangGraph)** | Mantém o estado tipado do grafo (spec, código atual, histórico de tentativas, contagem de iterações, tokens) e a aresta condicional QA→Coder / QA→Fim. |
 
-### Loop de autocorreção
-
-```
-Coder → Test Runner → QA
-          ↑               │
-          └── falhou ─────┘   (até MAX_ITERATIONS, padrão 3)
-```
-
-### Fluxo de dados — `devsquad run`
+**Fluxo de dados**
 
 1. CLI/API recebe `task` (+ opcional `context`: arquivos existentes do workspace, `max_iterations`).
 2. Refiner → `Spec` (Pydantic).
@@ -124,15 +94,53 @@ Coder → Test Runner → QA
 5. QA(`ResultadoExecucao`) → `Veredito` (aprovado | corrigir com diagnóstico).
 6. Se aprovado ou limite atingido → grava no `--workspace` (ou não, se falhou e sem `--write-on-fail`) e retorna resultado final: código, testes, status, nº de iterações, histórico por agente, tokens.
 
-### Fluxo de dados — `devsquad build-feature`
+---
+
+### 3.2 Modo completo — `devsquad build-feature`
+
+**Visão geral**
+
+```mermaid
+flowchart TD
+    Start([Feature em linguagem natural]) --> Architect
+
+    Architect["🏛️ Architect\nlê README/contexto do workspace\nproduz um PLANO: lista ordenada de módulos\n+ dependências entre eles"]
+
+    Architect --> ModuleLoop
+
+    subgraph ModuleLoop["por módulo do plano, em ordem"]
+        direction TB
+        Inner["Refiner → Coder → QA\n(o loop do modo simples, 3.1, sem mudança)"]
+    end
+
+    ModuleLoop -->|todos os módulos aprovados| Integration
+
+    Integration["🔗 Integration QA\ngera um teste que importa os módulos\npelos nomes de arquivo reais, roda via pytest"]
+
+    Integration -->|passou| Done([✅ status: approved])
+    Integration -->|falhou, tentativas < MAX| Fix["Coder focado\n(só o módulo apontado,\ncom o feedback da falha de integração)"]
+    Fix --> Integration
+    Integration -->|falhou, tentativas == MAX| Partial([⚠️ status: partial])
+```
+
+**Componentes**
+
+| Componente | Responsabilidade |
+|---|---|
+| **Architect** | Recebe a feature + contexto do workspace (README + `--context-dir`) e produz um `Plan`: lista ordenada de módulos, cada um com sua tarefa e os contratos (assinaturas) que módulos anteriores do plano expõem. |
+| **Module Loop** | Roda o loop do modo simples (3.1) uma vez por módulo do plano, na ordem de dependência. Cada módulo aprovado entra como contexto dos módulos seguintes. |
+| **Integration QA** | Só roda depois que todos os módulos passaram individualmente. Gera um teste de integração que importa os módulos pelos nomes de arquivo reais e roda via `pytest` (mesmo Test Runner do modo simples, estendido pra múltiplos arquivos). Se falhar, aponta qual módulo é a causa raiz. |
+| **Fix (Coder focado)** | Reaproveita direto o Coder do módulo apontado, com o feedback do Integration QA — sem rodar o Refiner de novo nem refazer os outros módulos. |
+
+**Fluxo de dados**
 
 1. Architect(`feature`, contexto) → `Plan` (lista de `PlannedModule`, cada um com `task` e `depends_on`).
-2. Pra cada módulo do plano, nessa ordem: roda o fluxo de `devsquad run` acima, usando o código dos módulos já aprovados como contexto do próximo.
+2. Pra cada módulo do plano, nessa ordem: roda o fluxo do modo simples (3.1), usando o código dos módulos já aprovados como contexto do próximo.
 3. Com todos os módulos aprovados: Integration QA gera um teste que importa os módulos de verdade e roda via Test Runner (multi-arquivo).
 4. Se aprovado → `status: approved`. Se não, e ainda há orçamento (`--max-integration-iterations`): identifica o módulo culpado (`IntegrationVerdict.failing_module`), roda o Coder só nesse módulo com o feedback da falha, e repete o passo 3.
 5. Se esgotar o orçamento sem aprovar → `status: partial`. Grava no `--workspace` todos os módulos gerados (aprovados ou não), e retorna o plano, cada módulo, o histórico completo e os tokens.
 
-### Modelos de dados do modo completo
+**Modelos de dados**
 
 ```python
 class PlannedModule(BaseModel):
@@ -163,6 +171,8 @@ class FeatureResult(BaseModel):
     latency_seconds: float
     written_to: list[str]
 ```
+
+---
 
 ## 4. Como rodar
 
