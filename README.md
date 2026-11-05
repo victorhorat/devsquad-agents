@@ -140,15 +140,18 @@ class PlannedModule(BaseModel):
     task: str
     depends_on: list[str] = []
 
+
 class Plan(BaseModel):
     feature: str
     modules: list[PlannedModule]
+
 
 class IntegrationVerdict(BaseModel):
     approved: bool
     failing_module: str | None = None
     traceback_summary: str | None = None
     feedback_for_coder: str | None = None
+
 
 class FeatureResult(BaseModel):
     status: Literal["approved", "partial", "plan_failed"]
