@@ -51,7 +51,18 @@ def _load_readme_context(workspace: Path | None) -> dict[str, str]:
     return {str(readme): readme.read_text(encoding="utf-8")}
 
 
-def _make_progress_callback():
+def _full_output_for(agent: str, state: GraphState) -> str | None:
+    if agent == "refiner" and state.get("spec"):
+        return state["spec"].model_dump_json(indent=2)
+    if agent == "coder" and state.get("submission"):
+        submission = state["submission"]
+        return f"--- código ---\n{submission.code}\n--- testes ---\n{submission.tests}"
+    if agent == "qa" and state.get("verdict"):
+        return state["verdict"].model_dump_json(indent=2)
+    return None
+
+
+def _make_progress_callback(verbose: bool = False):
     seen = 0
 
     def on_step(state: GraphState) -> None:
@@ -60,6 +71,11 @@ def _make_progress_callback():
         for entry in history[seen:]:
             label = _AGENT_LABELS.get(entry.agent, entry.agent)
             console.print(f"[bold]{label}[/bold] (iter {entry.iteration}): {entry.summary}")
+            if verbose:
+                detail = _full_output_for(entry.agent, state)
+                if detail:
+                    console.print(detail, style="dim", markup=False)
+                    console.print()
         seen = len(history)
 
     return on_step
@@ -91,6 +107,12 @@ def run(
     write_on_fail: bool = typer.Option(
         False, "--write-on-fail", help="Grava no workspace mesmo se o QA não aprovar"
     ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Mostra o output completo de cada agente (spec, código+testes, veredito)",
+    ),
 ) -> None:
     """Roda o time de agentes sobre uma tarefa e, se aprovado, grava no workspace."""
     settings = load_settings()
@@ -113,7 +135,7 @@ def run(
         workspace=workspace,
         module_path=module,
         write_on_fail=write_on_fail,
-        on_step=_make_progress_callback(),
+        on_step=_make_progress_callback(verbose),
     )
 
     console.print()
@@ -154,6 +176,12 @@ def build_feature(
         "--no-readme-context",
         help="Não incluir automaticamente o README.md do --workspace como contexto",
     ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Mostra o plano completo do Architect e o código+testes final de cada módulo",
+    ),
 ) -> None:
     """Planeja uma feature em vários módulos (Architect) e os gera em sequência,
     encadeando contexto entre eles, com um teste de integração no final."""
@@ -179,9 +207,23 @@ def build_feature(
     )
 
     console.print(f"[bold]Plano:[/bold] {len(result.plan.modules)} módulo(s)")
+    if verbose:
+        console.print(result.plan.model_dump_json(indent=2), style="dim", markup=False)
+        console.print()
     for entry in result.history:
         label = _AGENT_LABELS.get(entry.agent, entry.agent)
         console.print(f"[bold]{label}[/bold] (iter {entry.iteration}): {entry.summary}")
+
+    if verbose:
+        console.print()
+        for outcome in result.modules:
+            console.print(f"[bold]--- {outcome.module_path} ---[/bold]")
+            console.print(
+                f"--- código ---\n{outcome.result.code}\n--- testes ---\n{outcome.result.tests}",
+                style="dim",
+                markup=False,
+            )
+            console.print()
 
     console.print()
     if result.status == "approved":

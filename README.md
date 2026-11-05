@@ -161,6 +161,7 @@ devsquad run "<tarefa em linguagem natural>" [opções]
 | `--context-dir` | Não | `--context-dir ../food-order-agent/src/foodagent` | Mesma ideia do `--context`, mas pega todos os `.py` de uma pasta de uma vez (ignora `test_*.py`). Repita pra várias pastas. |
 | `--no-readme-context` | Não (desligado por padrão) | `--no-readme-context` | Por padrão, se `--workspace` é usado e existe um `README.md` na raiz dele, esse README **entra automaticamente como contexto** (é onde normalmente estão as convenções e decisões de domínio). Essa flag desliga esse comportamento. |
 | `--write-on-fail` | Não | `--write-on-fail` | Grava no workspace mesmo se o QA **não** aprovar (por padrão, só grava quando aprovado). Útil pra inspecionar uma tentativa que não passou. |
+| `--verbose` / `-v` | Não | `--verbose` | Mostra o output completo de cada agente — a `Spec` inteira do Refiner, o código+testes completos do Coder, o `Verdict` inteiro do QA — em vez de só o resumo de uma linha. |
 
 **Exemplo mínimo** (só mostra o resultado no terminal, não grava nada):
 
@@ -201,6 +202,7 @@ Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encai
 | `--max-module-iterations` | Não (padrão `3`) | `--max-module-iterations 5` | Mesmo que `--max-iterations` do `devsquad run`, mas aplicado a cada módulo do plano individualmente. |
 | `--max-integration-iterations` | Não (padrão `2`) | `--max-integration-iterations 3` | Quantas vezes o Integration QA pode apontar um módulo pra corrigir antes de devolver `status: partial`. |
 | `--context` / `--context-dir` / `--no-readme-context` | Não | iguais ao `devsquad run` | Mesmo mecanismo de contexto, aplicado ao Architect e a cada módulo do plano. |
+| `--verbose` / `-v` | Não | `--verbose` | Mostra o `Plan` completo do Architect e o código+testes final de cada módulo, além do histórico resumido. |
 
 **Exemplo:**
 
