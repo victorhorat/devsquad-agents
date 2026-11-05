@@ -11,9 +11,12 @@ class Settings(BaseSettings):
     refiner_model: str = ""
     coder_model: str = ""
     qa_model: str = ""
+    architect_model: str = ""
+    integration_qa_model: str = ""
 
     max_iterations: int = 3
     test_timeout_seconds: int = 30
+    max_integration_iterations: int = 2
 
     def model_for(self, agent: str) -> str:
         override = getattr(self, f"{agent}_model", "")

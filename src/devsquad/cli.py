@@ -5,6 +5,7 @@ from rich.console import Console
 
 from devsquad.config import load_settings
 from devsquad.evals import run_all, summarize
+from devsquad.feature import run_feature
 from devsquad.graph import GraphState
 from devsquad.llm.openai_client import OpenAICompatibleClient
 from devsquad.task import run_task
@@ -18,6 +19,8 @@ _AGENT_LABELS = {
     "refiner": "🧭 Refiner",
     "coder": "👩‍💻 Coder",
     "qa": "🔍 QA",
+    "architect": "🏛️ Architect",
+    "integration_qa": "🔗 Integration QA",
 }
 
 
@@ -126,6 +129,77 @@ def run(
         console.print(f"Gravado em: {result.written_to}")
     elif workspace and module:
         console.print("Nada foi gravado (use --write-on-fail para gravar mesmo reprovado).")
+
+
+@app.command()
+def build_feature(
+    feature: str = typer.Argument(
+        ..., help="Descrição da feature (multi-módulo) em linguagem natural"
+    ),
+    workspace: Path | None = typer.Option(
+        None, "--workspace", help="Diretório do projeto onde gravar os módulos gerados"
+    ),
+    max_module_iterations: int = typer.Option(3, "--max-module-iterations"),
+    max_integration_iterations: int = typer.Option(2, "--max-integration-iterations"),
+    context: list[str] = typer.Option(
+        [], "--context", help="Arquivo(s) existentes do workspace para dar de contexto"
+    ),
+    context_dir: list[str] = typer.Option(
+        [],
+        "--context-dir",
+        help="Pasta(s) cujos arquivos .py (exceto test_*.py) entram como contexto",
+    ),
+    no_readme_context: bool = typer.Option(
+        False,
+        "--no-readme-context",
+        help="Não incluir automaticamente o README.md do --workspace como contexto",
+    ),
+) -> None:
+    """Planeja uma feature em vários módulos (Architect) e os gera em sequência,
+    encadeando contexto entre eles, com um teste de integração no final."""
+    settings = load_settings()
+    llm = OpenAICompatibleClient(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+
+    console.print(f"[bold cyan]Feature:[/bold cyan] {feature}\n")
+
+    context_files = {
+        **({} if no_readme_context else _load_readme_context(workspace)),
+        **_load_context_dirs(context_dir),
+        **_load_context_files(context),
+    }
+
+    result = run_feature(
+        llm=llm,
+        settings=settings,
+        feature=feature,
+        context_files=context_files,
+        max_module_iterations=max_module_iterations,
+        max_integration_iterations=max_integration_iterations,
+        workspace=workspace,
+    )
+
+    console.print(f"[bold]Plano:[/bold] {len(result.plan.modules)} módulo(s)")
+    for entry in result.history:
+        label = _AGENT_LABELS.get(entry.agent, entry.agent)
+        console.print(f"[bold]{label}[/bold] (iter {entry.iteration}): {entry.summary}")
+
+    console.print()
+    if result.status == "approved":
+        console.print("[bold green]✅ Feature aprovada (módulos + integração)[/bold green]")
+    elif result.status == "partial":
+        console.print(
+            "[bold yellow]⚠️ Módulos gerados, mas integração não fechou "
+            "(veja o histórico acima)[/bold yellow]"
+        )
+    else:
+        console.print("[bold red]❌ Falha ao planejar a feature[/bold red]")
+
+    console.print(f"Tentativas de integração: {result.integration_attempts}")
+    console.print(f"Tokens totais: {result.total_tokens}")
+    console.print(f"Latência: {result.latency_seconds}s")
+    if result.written_to:
+        for path in result.written_to:
+            console.print(f"Gravado em: {path}")
 
 
 @app.command()

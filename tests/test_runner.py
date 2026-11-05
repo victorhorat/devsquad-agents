@@ -1,4 +1,4 @@
-from devsquad.runner import run_tests
+from devsquad.runner import run_integration_tests, run_tests
 
 PASSING_CODE = "def add(a: int, b: int) -> int:\n    return a + b\n"
 PASSING_TESTS = "from solution import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"
@@ -42,3 +42,30 @@ def test_sanitized_env_strips_llm_api_key(monkeypatch):
     )
     result = run_tests(code, tests, timeout_seconds=30)
     assert result.passed is True
+
+
+def test_run_integration_tests_with_real_cross_module_import():
+    modules = {
+        "a.py": "def double(x: int) -> int:\n    return x * 2\n",
+        "b.py": "def increment(x: int) -> int:\n    return x + 1\n",
+    }
+    integration_test = (
+        "from a import double\nfrom b import increment\n\n\n"
+        "def test_compose():\n    assert increment(double(3)) == 7\n"
+    )
+    result = run_integration_tests(modules, integration_test, timeout_seconds=30)
+    assert result.passed is True
+
+
+def test_run_integration_tests_reports_real_failure():
+    modules = {
+        "a.py": "def double(x: int) -> int:\n    return x * 2\n",
+        "b.py": "def increment(x: int) -> int:\n    return x - 1\n",
+    }
+    integration_test = (
+        "from a import double\nfrom b import increment\n\n\n"
+        "def test_compose():\n    assert increment(double(3)) == 7\n"
+    )
+    result = run_integration_tests(modules, integration_test, timeout_seconds=30)
+    assert result.passed is False
+    assert "test_compose" in result.stdout

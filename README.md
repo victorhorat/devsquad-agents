@@ -70,6 +70,8 @@ flowchart TD
 | **LLM Client** | Cliente genérico compatível com OpenAI (`base_url` livre), com retry/backoff para 429/5xx, timeout, e parsing tolerante de JSON para respostas estruturadas quando o provedor não suporta `response_format`. Modelo configurável por agente. |
 | **Orquestrador (LangGraph)** | Mantém o estado tipado do grafo (spec, código atual, histórico de tentativas, contagem de iterações, tokens) e a aresta condicional QA→Coder / QA→Fim. |
 
+Isso tudo cobre **um módulo por vez** (`devsquad run`). Pra uma **feature com vários módulos**, tem uma camada por fora disso — Architect planeja os módulos, o grafo acima roda uma vez por módulo, e um Integration QA testa os módulos juntos no final. Arquitetura detalhada em [`docs/architect-v2.md`](docs/architect-v2.md).
+
 ### Loop de autocorreção
 
 ```
@@ -184,6 +186,32 @@ devsquad eval
 
 Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta contra o provedor configurado no `.env`, imprime o resultado no terminal e grava a tabela em `evals/results.md` (ver seção 6).
 
+### `devsquad build-feature`
+
+```bash
+devsquad build-feature "<feature em linguagem natural>" [opções]
+```
+
+Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encaixam), não um módulo isolado. Arquitetura completa em [`docs/architect-v2.md`](docs/architect-v2.md).
+
+| Flag | Obrigatório? | Exemplo | O que faz |
+|---|---|---|---|
+| `<feature>` (argumento posicional) | **Sim** | `"carrinho de compras com busca no cardapio"` | Descrição da feature. O Architect quebra isso em um plano de módulos — você não escolhe os caminhos de arquivo aqui. |
+| `--workspace` | Não | `--workspace ../food-order-agent` | Pasta do projeto onde gravar todos os módulos gerados (aprovados ou não — hoje `build-feature` não tem um `--write-on-fail`, sempre grava o que foi produzido). |
+| `--max-module-iterations` | Não (padrão `3`) | `--max-module-iterations 5` | Mesmo que `--max-iterations` do `devsquad run`, mas aplicado a cada módulo do plano individualmente. |
+| `--max-integration-iterations` | Não (padrão `2`) | `--max-integration-iterations 3` | Quantas vezes o Integration QA pode apontar um módulo pra corrigir antes de devolver `status: partial`. |
+| `--context` / `--context-dir` / `--no-readme-context` | Não | iguais ao `devsquad run` | Mesmo mecanismo de contexto, aplicado ao Architect e a cada módulo do plano. |
+
+**Exemplo:**
+
+```bash
+devsquad build-feature "carrinho de compras que busca itens no cardapio, adiciona ao carrinho e calcula o total com taxa de entrega" \
+  --workspace ../food-order-agent \
+  --context-dir ../food-order-agent/src/foodagent
+```
+
+Saída inclui o plano do Architect, o histórico de cada módulo (Refiner/Coder/QA) e do Integration QA, e o status final: `approved` (tudo passou, inclusive integração), ou `partial` (módulos individuais passaram, mas a integração não fechou dentro do orçamento de tentativas).
+
 ### API
 
 | Rota | Método | Corpo/parâmetros | Resposta |
@@ -244,6 +272,7 @@ Taxa de sucesso: **100%** (6/6) · Média de iterações até passar: **1.3** ·
 ## 8. Próximos passos
 
 - Sandbox real em container descartável.
-- Mais agentes: `Architect` (decisões de design antes do Coder), `Docs` (gera docstrings/README do módulo).
+- Agente `Docs` (gera docstrings/README do módulo/feature).
 - Cache de respostas do LLM entre iterações.
 - UI simples para acompanhar o grafo em execução.
+- `build-feature`: permitir que módulos gerados importem uns aos outros de verdade durante o teste unitário próprio (hoje cada módulo é testado isolado; só o Integration QA testa a composição real — ver limites em [`docs/architect-v2.md`](docs/architect-v2.md)).

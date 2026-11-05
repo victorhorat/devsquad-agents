@@ -42,7 +42,7 @@ class Verdict(BaseModel):
 
 
 class AgentLogEntry(BaseModel):
-    agent: Literal["refiner", "coder", "qa"]
+    agent: Literal["refiner", "coder", "qa", "architect", "integration_qa"]
     iteration: int
     summary: str
     prompt_tokens: int = 0
@@ -58,3 +58,45 @@ class TaskResult(BaseModel):
     total_tokens: int
     latency_seconds: float = 0.0
     written_to: str | None = None
+
+
+class PlannedModule(BaseModel):
+    """Um módulo do plano produzido pelo Architect."""
+
+    module_path: str
+    task: str
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class Plan(BaseModel):
+    """Plano produzido pelo Architect pra uma feature multi-módulo."""
+
+    feature: str
+    modules: list[PlannedModule]
+
+
+class ModuleOutcome(BaseModel):
+    """Resultado de gerar um módulo do plano."""
+
+    module_path: str
+    result: TaskResult
+
+
+class IntegrationVerdict(BaseModel):
+    """Veredito estruturado produzido pelo Integration QA."""
+
+    approved: bool
+    failing_module: str | None = None
+    traceback_summary: str | None = None
+    feedback_for_coder: str | None = None
+
+
+class FeatureResult(BaseModel):
+    status: Literal["approved", "partial", "plan_failed"]
+    plan: Plan
+    modules: list[ModuleOutcome]
+    history: list[AgentLogEntry]
+    integration_attempts: int
+    total_tokens: int
+    latency_seconds: float = 0.0
+    written_to: list[str] = Field(default_factory=list)
