@@ -349,17 +349,7 @@ Taxa de sucesso: **100%** (6/6) · Média de iterações até passar: **1.3** ·
 | paginar_lista | ✅ | 1 | 3676 | 24.17 |
 | validar_email | ✅ | 1 | 3858 | 27.82 |
 
-## 7. Decisões técnicas e trade-offs
-
-- **Por que LangGraph:** estado tipado explícito e aresta condicional modelam naturalmente o loop Coder↔QA, sem precisar de uma máquina de estados escrita à mão.
-- **Por que cliente compatível com OpenAI em vez de SDK nativo de cada provedor:** permite trocar de provedor só mudando `LLM_BASE_URL`/`LLM_MODEL`, sem reescrever código — inclusive para endpoints locais.
-- **Por que executar os testes de verdade (e não só pedir pro QA "revisar" o código):** um LLM julgando código visualmente erra; rodar pytest de fato dá um veredito objetivo e verificável.
-- **Por que o modo completo reaproveita o loop interno em vez de reescrever tudo:** `build-feature` não é um sistema paralelo — ele chama exatamente o mesmo código de `devsquad run` uma vez por módulo. Menos código pra manter, e qualquer melhoria no loop interno beneficia os dois modos.
-- **Por que existe um Integration QA separado do QA de cada módulo:** QA de módulo valida cada peça isoladamente; Integration QA valida a composição real entre os módulos, gerando e rodando um teste que importa todos eles juntos. É uma defesa em camadas deliberada — cada camada testa um nível diferente de correção, igual um time humano teria testes unitários e testes de integração separados.
-- **Por que `--max-integration-iterations` e `status: partial` existem:** planejar antes de executar (Architect) é mais previsível, mas significa que acoplamento entre módulos só é validado no final. O orçamento de tentativas de correção e o status `partial` deixam esse resultado explícito e observável, em vez de mascarar.
-- **Isolamento do Test Runner:** subprocess com timeout e variáveis de ambiente sanitizadas (nunca herda `LLM_API_KEY`). Rodar em container descartável é o passo natural de evolução — ver seção 8.
-
-## 8. Próximos passos
+## 7. Próximos passos
 
 - Sandbox real em container descartável.
 - Agente `Docs` (gera docstrings/README do módulo/feature).
