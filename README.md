@@ -143,54 +143,56 @@ O `Dockerfile` é multi-stage: builda as dependências com `uv` num estágio e c
 
 ## 5. CLI e API
 
-### CLI
+### `devsquad run`
 
 ```bash
-devsquad run "função que valida CPF com dígitos verificadores" \
-  --workspace ../food-order-agent \
-  --module src/validators/cpf.py \
-  --max-iterations 3
+devsquad run "<tarefa em linguagem natural>" [opções]
 ```
 
-Grava `src/validators/cpf.py` e `src/validators/test_cpf.py` no workspace informado, só se o QA aprovar (ou sempre, com `--write-on-fail`).
+| Flag | Obrigatório? | Exemplo | O que faz |
+|---|---|---|---|
+| `<tarefa>` (argumento posicional) | **Sim** | `"funcao que valida CPF"` | Descrição da tarefa. Pode ser técnica (com assinatura) ou totalmente casual — o Refiner estrutura isso de qualquer forma; quanto mais vago, mais decisões de nome/formato ficam a critério do Refiner/Coder. |
+| `--workspace` | Não | `--workspace ../food-order-agent` | Pasta do projeto onde gravar o resultado, se aprovado. Sem essa flag, o código só aparece na saída do terminal, não é gravado em disco. |
+| `--module` | Só se usar `--workspace` | `--module src/foodagent/cart.py` | Caminho (relativo ao `--workspace`) de onde gravar o módulo. Sem ele, mesmo com `--workspace`, nada é gravado. |
+| `--max-iterations` | Não (padrão `3`) | `--max-iterations 5` | Quantas vezes o loop Coder↔QA tenta corrigir antes de desistir. |
+| `--context` | Não | `--context ../food-order-agent/src/foodagent/cart.py` | Um arquivo existente a dar como referência de estilo/convenção. Repita a flag pra vários arquivos. Por padrão, `devsquad run` **não sabe nada** do que já existe no workspace — isso é o único jeito manual de contar pra ele. |
+| `--context-dir` | Não | `--context-dir ../food-order-agent/src/foodagent` | Mesma ideia do `--context`, mas pega todos os `.py` de uma pasta de uma vez (ignora `test_*.py`). Repita pra várias pastas. |
+| `--no-readme-context` | Não (desligado por padrão) | `--no-readme-context` | Por padrão, se `--workspace` é usado e existe um `README.md` na raiz dele, esse README **entra automaticamente como contexto** (é onde normalmente estão as convenções e decisões de domínio). Essa flag desliga esse comportamento. |
+| `--write-on-fail` | Não | `--write-on-fail` | Grava no workspace mesmo se o QA **não** aprovar (por padrão, só grava quando aprovado). Útil pra inspecionar uma tentativa que não passou. |
 
-**Quão técnico precisa ser o pedido?** Nenhum pouco, na verdade — isso é literalmente o trabalho do Refiner. Dá pra escrever algo totalmente casual:
+**Exemplo mínimo** (só mostra o resultado no terminal, não grava nada):
 
 ```bash
-devsquad run "cria uma funcao que calcula o valor da taxa de entrega com base na distancia em km, tipo uma taxa fixa mais um valor por km rodado" \
-  --workspace ../food-order-agent \
-  --module src/foodagent/delivery.py
+devsquad run "função que valida CPF com dígitos verificadores"
 ```
 
-O Refiner transforma isso numa especificação completa (objetivo, assinatura, critérios de aceite, casos de teste) por conta própria. O trade-off: quanto mais vago o pedido, mais decisões de nome/formato ficam a critério do Refiner/Coder — ótimo pra deixar o agente "pensar", mas você só vai saber a assinatura exata depois de olhar o código gerado.
-
-**Ele lê o resto do projeto sozinho?** Não. Por padrão, cada `devsquad run` não sabe nada do que já existe no `--workspace`, nem escaneia a pasta. Se quiser que ele siga o estilo/convenções de um arquivo que já existe (nomes em português, forma de validar, etc.), passa esse arquivo explicitamente com `--context`:
+**Exemplo completo**, gerando um módulo dentro de outro projeto e reaproveitando o estilo de um arquivo já existente:
 
 ```bash
 devsquad run "cria uma funcao de busca no cardapio, recebendo a lista de itens e um texto digitado pelo usuario" \
   --workspace ../food-order-agent \
   --module src/foodagent/catalog.py \
-  --context ../food-order-agent/src/foodagent/cart.py
+  --context-dir ../food-order-agent/src/foodagent \
+  --max-iterations 5
 ```
 
-`--context` aceita múltiplos arquivos (repita a flag) e o conteúdo deles entra no prompt do Refiner e do Coder — é a forma de dar "memória" de um módulo pra outro dentro do mesmo workspace.
-
-Pra não ter que listar arquivo por arquivo conforme o workspace cresce, tem `--context-dir`, que inclui todos os `.py` de uma pasta (ignorando `test_*.py`):
+### `devsquad eval`
 
 ```bash
-devsquad run "cria uma funcao de busca no cardapio..." \
-  --workspace ../food-order-agent \
-  --module src/foodagent/catalog.py \
-  --context-dir ../food-order-agent/src/foodagent
+devsquad eval
 ```
 
-E, sempre que `--workspace` é usado, o `README.md` da raiz desse workspace (se existir) **entra automaticamente como contexto** — é onde normalmente estão as decisões de domínio, convenções e a arquitetura do projeto, então vale a pena deixá-lo atualizado. Pra desligar esse comportamento, usa `--no-readme-context`.
+Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta contra o provedor configurado no `.env`, imprime o resultado no terminal e grava a tabela em `evals/results.md` (ver seção 6).
 
 ### API
 
-- `POST /tasks` — `{ "task": "...", "max_iterations": 3 }` → resultado completo
-- `GET /health`
-- Swagger em `/docs`
+| Rota | Método | Corpo/parâmetros | Resposta |
+|---|---|---|---|
+| `/health` | `GET` | — | `{"status": "ok"}` |
+| `/tasks` | `POST` | `{"task": "...", "max_iterations": 3}` (`max_iterations` opcional, padrão `3`) | `TaskResult` completo (abaixo) |
+| `/docs` | `GET` | — | Swagger interativo |
+
+> A API não tem `--workspace`/`--context` como a CLI — hoje ela só roda a tarefa e devolve o código, sem gravar em disco. Pra gerar dentro de um projeto real, use a CLI.
 
 ```bash
 curl -X POST http://localhost:8000/tasks \
