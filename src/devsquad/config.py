@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     llm_api_key: str = ""
     llm_model: str = "gemini-2.0-flash"
+    llm_max_output_tokens: int = 4096
 
     refiner_model: str = ""
     coder_model: str = ""

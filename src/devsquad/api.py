@@ -17,7 +17,9 @@ async def lifespan(app: FastAPI):
     settings = load_settings()
     _state["settings"] = settings
     _state["llm"] = OpenAICompatibleClient(
-        base_url=settings.llm_base_url, api_key=settings.llm_api_key
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        max_output_tokens=settings.llm_max_output_tokens,
     )
     yield
     _state.clear()

@@ -7,10 +7,15 @@ from devsquad.llm.base import LLMResponse
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 MAX_RETRIES = 3
 BACKOFF_BASE_SECONDS = 1.5
+DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
 class LLMConfigError(RuntimeError):
     """Configuração de provedor ausente ou inválida."""
+
+
+class TruncatedResponseError(RuntimeError):
+    """O provedor cortou a resposta por limite de tokens antes de terminar."""
 
 
 class OpenAICompatibleClient:
@@ -20,12 +25,20 @@ class OpenAICompatibleClient:
     outro endpoint OpenAI-compatible que o usuário configure via env var).
     """
 
-    def __init__(self, *, base_url: str, api_key: str, timeout: float = 60.0) -> None:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        timeout: float = 60.0,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+    ) -> None:
         if not base_url or not api_key:
             raise LLMConfigError(
                 "LLM_BASE_URL e LLM_API_KEY precisam estar configurados (veja .env.example)."
             )
         self._client = openai.OpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
+        self._max_output_tokens = max_output_tokens
 
     def complete(self, *, system: str, user: str, model: str) -> LLMResponse:
         last_error: Exception | None = None
@@ -33,15 +46,23 @@ class OpenAICompatibleClient:
             try:
                 response = self._client.chat.completions.create(
                     model=model,
+                    max_tokens=self._max_output_tokens,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
                 )
-                choice = response.choices[0].message.content or ""
+                choice = response.choices[0]
+                if choice.finish_reason == "length":
+                    raise TruncatedResponseError(
+                        f"A resposta do modelo '{model}' foi cortada em "
+                        f"{self._max_output_tokens} tokens antes de terminar. Aumente "
+                        "max_output_tokens ou peça uma tarefa mais específica/menor."
+                    )
+                content = choice.message.content or ""
                 usage = response.usage
                 return LLMResponse(
-                    content=choice,
+                    content=content,
                     prompt_tokens=usage.prompt_tokens if usage else 0,
                     completion_tokens=usage.completion_tokens if usage else 0,
                 )

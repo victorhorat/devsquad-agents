@@ -116,7 +116,11 @@ def run(
 ) -> None:
     """Roda o time de agentes sobre uma tarefa e, se aprovado, grava no workspace."""
     settings = load_settings()
-    llm = OpenAICompatibleClient(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+    llm = OpenAICompatibleClient(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        max_output_tokens=settings.llm_max_output_tokens,
+    )
 
     console.print(f"[bold cyan]Tarefa:[/bold cyan] {task}\n")
 
@@ -186,7 +190,11 @@ def build_feature(
     """Planeja uma feature em vários módulos (Architect) e os gera em sequência,
     encadeando contexto entre eles, com um teste de integração no final."""
     settings = load_settings()
-    llm = OpenAICompatibleClient(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+    llm = OpenAICompatibleClient(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        max_output_tokens=settings.llm_max_output_tokens,
+    )
 
     console.print(f"[bold cyan]Feature:[/bold cyan] {feature}\n")
 
@@ -248,7 +256,11 @@ def build_feature(
 def eval() -> None:
     """Roda o benchmark de tarefas em evals/ e grava a tabela em evals/results.md."""
     settings = load_settings()
-    llm = OpenAICompatibleClient(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+    llm = OpenAICompatibleClient(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        max_output_tokens=settings.llm_max_output_tokens,
+    )
 
     outcomes = run_all(llm, settings)
     for outcome in outcomes:
