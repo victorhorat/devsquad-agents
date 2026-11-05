@@ -154,6 +154,27 @@ devsquad run "função que valida CPF com dígitos verificadores" \
 
 Grava `src/validators/cpf.py` e `src/validators/test_cpf.py` no workspace informado, só se o QA aprovar (ou sempre, com `--write-on-fail`).
 
+**Quão técnico precisa ser o pedido?** Nenhum pouco, na verdade — isso é literalmente o trabalho do Refiner. Dá pra escrever algo totalmente casual:
+
+```bash
+devsquad run "cria uma funcao que calcula o valor da taxa de entrega com base na distancia em km, tipo uma taxa fixa mais um valor por km rodado" \
+  --workspace ../food-order-agent \
+  --module src/foodagent/delivery.py
+```
+
+O Refiner transforma isso numa especificação completa (objetivo, assinatura, critérios de aceite, casos de teste) por conta própria. O trade-off: quanto mais vago o pedido, mais decisões de nome/formato ficam a critério do Refiner/Coder — ótimo pra deixar o agente "pensar", mas você só vai saber a assinatura exata depois de olhar o código gerado.
+
+**Ele lê o resto do projeto sozinho?** Não. Por padrão, cada `devsquad run` não sabe nada do que já existe no `--workspace`, nem escaneia a pasta. Se quiser que ele siga o estilo/convenções de um arquivo que já existe (nomes em português, forma de validar, etc.), passa esse arquivo explicitamente com `--context`:
+
+```bash
+devsquad run "cria uma funcao de busca no cardapio, recebendo a lista de itens e um texto digitado pelo usuario" \
+  --workspace ../food-order-agent \
+  --module src/foodagent/catalog.py \
+  --context ../food-order-agent/src/foodagent/cart.py
+```
+
+`--context` aceita múltiplos arquivos (repita a flag) e o conteúdo deles entra no prompt do Refiner e do Coder — é a forma de dar "memória" de um módulo pra outro dentro do mesmo workspace.
+
 ### API
 
 - `POST /tasks` — `{ "task": "...", "max_iterations": 3 }` → resultado completo
