@@ -175,6 +175,17 @@ devsquad run "cria uma funcao de busca no cardapio, recebendo a lista de itens e
 
 `--context` aceita múltiplos arquivos (repita a flag) e o conteúdo deles entra no prompt do Refiner e do Coder — é a forma de dar "memória" de um módulo pra outro dentro do mesmo workspace.
 
+Pra não ter que listar arquivo por arquivo conforme o workspace cresce, tem `--context-dir`, que inclui todos os `.py` de uma pasta (ignorando `test_*.py`):
+
+```bash
+devsquad run "cria uma funcao de busca no cardapio..." \
+  --workspace ../food-order-agent \
+  --module src/foodagent/catalog.py \
+  --context-dir ../food-order-agent/src/foodagent
+```
+
+E, sempre que `--workspace` é usado, o `README.md` da raiz desse workspace (se existir) **entra automaticamente como contexto** — é onde normalmente estão as decisões de domínio, convenções e a arquitetura do projeto, então vale a pena deixá-lo atualizado. Pra desligar esse comportamento, usa `--no-readme-context`.
+
 ### API
 
 - `POST /tasks` — `{ "task": "...", "max_iterations": 3 }` → resultado completo
