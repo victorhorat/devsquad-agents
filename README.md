@@ -36,9 +36,37 @@ Fiz este projeto para o meu portfólio de IA Generativa. Mas ele não é só uma
 
 ## 3. Arquitetura
 
-### Visão geral
+O projeto tem dois modos, do mais simples ao mais completo. Os dois usam o mesmo motor por baixo (nenhum código duplicado): o modo completo só adiciona duas camadas em volta do modo simples.
 
-Grafo de estado (LangGraph) com três nós de agente e uma aresta condicional que decide entre repetir o ciclo de correção ou finalizar.
+- **`devsquad run`** — um módulo por vez. Três agentes (Refiner, Coder, QA) em loop até o código passar nos testes de verdade.
+- **`devsquad build-feature`** *(modo completo, dá pra construir uma funcionalidade inteira)* — um Architect planeja vários módulos, cada um passa pelo loop acima sem nenhuma mudança, e um Integration QA testa os módulos juntos no final, corrigindo o módulo certo se algo não se encaixar.
+
+### Visão geral — modo completo (`build-feature`)
+
+```mermaid
+flowchart TD
+    Start([Feature em linguagem natural]) --> Architect
+
+    Architect["🏛️ Architect\nlê README/contexto do workspace\nproduz um PLANO: lista ordenada de módulos\n+ dependências entre eles"]
+
+    Architect --> ModuleLoop
+
+    subgraph ModuleLoop["por módulo do plano, em ordem"]
+        direction TB
+        Inner["Refiner → Coder → QA\n(o mesmo loop do devsquad run, sem mudança)"]
+    end
+
+    ModuleLoop -->|todos os módulos aprovados| Integration
+
+    Integration["🔗 Integration QA\ngera um teste que importa os módulos\npelos nomes de arquivo reais, roda via pytest"]
+
+    Integration -->|passou| Done([✅ status: approved])
+    Integration -->|falhou, tentativas < MAX| Fix["Coder focado\n(só o módulo apontado,\ncom o feedback da falha de integração)"]
+    Fix --> Integration
+    Integration -->|falhou, tentativas == MAX| Partial([⚠️ status: partial])
+```
+
+### Visão geral — loop interno (`devsquad run`, e cada módulo do plano acima)
 
 ```mermaid
 flowchart TD
@@ -59,18 +87,25 @@ flowchart TD
     Approve --> Write["💾 Grava código + testes\nno --workspace"]
 ```
 
-### Componentes
+### Componentes do modo completo
 
 | Componente | Responsabilidade |
 |---|---|
-| **Refiner** | Recebe a tarefa bruta (+ arquivos de contexto opcionais do workspace) e produz uma especificação estruturada: objetivo, assinaturas de interface, critérios de aceite, casos de teste (incluindo bordas) e restrições. Saída validada com Pydantic. |
+| **Architect** | Recebe a feature + contexto do workspace (README + `--context-dir`) e produz um `Plan`: lista ordenada de módulos, cada um com sua tarefa e os contratos (assinaturas) que módulos anteriores do plano expõem. |
+| **Module Loop** | Roda o loop interno (Refiner→Coder→QA) uma vez por módulo do plano, na ordem de dependência. Cada módulo aprovado entra como contexto dos módulos seguintes. |
+| **Integration QA** | Só roda depois que todos os módulos passaram individualmente. Gera um teste de integração que importa os módulos pelos nomes de arquivo reais e roda via `pytest` (mesmo Test Runner, estendido pra múltiplos arquivos). Se falhar, aponta qual módulo é a causa raiz. |
+| **Fix (Coder focado)** | Reaproveita direto o Coder do módulo apontado, com o feedback do Integration QA — sem rodar o Refiner de novo nem refazer os outros módulos. |
+
+### Componentes do loop interno (por módulo)
+
+| Componente | Responsabilidade |
+|---|---|
+| **Refiner** | Recebe a tarefa bruta (+ contexto) e produz uma especificação estruturada: objetivo, assinaturas de interface, critérios de aceite, casos de teste (incluindo bordas) e restrições. Saída validada com Pydantic. |
 | **Coder** | Gera o módulo Python e os testes pytest a partir da spec. A partir da 2ª iteração, recebe também o diagnóstico do QA e corrige. |
 | **Test Runner** | Executa o pytest gerado em diretório temporário isolado via `subprocess`, com timeout (30s padrão), sem herdar `LLM_API_KEY`/variáveis sensíveis, saída capturada e truncada. Não é um sandbox completo — ver seção 7. |
 | **QA** | Interpreta a saída do Test Runner e produz um veredito estruturado (Pydantic): aprovado ou não, teste que falhou, traceback resumido, causa provável. |
 | **LLM Client** | Cliente genérico compatível com OpenAI (`base_url` livre), com retry/backoff para 429/5xx, timeout, e parsing tolerante de JSON para respostas estruturadas quando o provedor não suporta `response_format`. Modelo configurável por agente. |
 | **Orquestrador (LangGraph)** | Mantém o estado tipado do grafo (spec, código atual, histórico de tentativas, contagem de iterações, tokens) e a aresta condicional QA→Coder / QA→Fim. |
-
-Isso tudo cobre **um módulo por vez** (`devsquad run`). Pra uma **feature com vários módulos**, tem uma camada por fora disso — Architect planeja os módulos, o grafo acima roda uma vez por módulo, e um Integration QA testa os módulos juntos no final. Arquitetura detalhada em [`docs/architect-v2.md`](docs/architect-v2.md).
 
 ### Loop de autocorreção
 
@@ -80,7 +115,7 @@ Coder → Test Runner → QA
           └── falhou ─────┘   (até MAX_ITERATIONS, padrão 3)
 ```
 
-### Fluxo de dados (alto nível)
+### Fluxo de dados — `devsquad run`
 
 1. CLI/API recebe `task` (+ opcional `context`: arquivos existentes do workspace, `max_iterations`).
 2. Refiner → `Spec` (Pydantic).
@@ -88,6 +123,43 @@ Coder → Test Runner → QA
 4. Test Runner(`{codigo, testes}`) → `ResultadoExecucao` (stdout/stderr truncado, passou/falhou).
 5. QA(`ResultadoExecucao`) → `Veredito` (aprovado | corrigir com diagnóstico).
 6. Se aprovado ou limite atingido → grava no `--workspace` (ou não, se falhou e sem `--write-on-fail`) e retorna resultado final: código, testes, status, nº de iterações, histórico por agente, tokens.
+
+### Fluxo de dados — `devsquad build-feature`
+
+1. Architect(`feature`, contexto) → `Plan` (lista de `PlannedModule`, cada um com `task` e `depends_on`).
+2. Pra cada módulo do plano, nessa ordem: roda o fluxo de `devsquad run` acima, usando o código dos módulos já aprovados como contexto do próximo.
+3. Com todos os módulos aprovados: Integration QA gera um teste que importa os módulos de verdade e roda via Test Runner (multi-arquivo).
+4. Se aprovado → `status: approved`. Se não, e ainda há orçamento (`--max-integration-iterations`): identifica o módulo culpado (`IntegrationVerdict.failing_module`), roda o Coder só nesse módulo com o feedback da falha, e repete o passo 3.
+5. Se esgotar o orçamento sem aprovar → `status: partial`. Grava no `--workspace` todos os módulos gerados (aprovados ou não), e retorna o plano, cada módulo, o histórico completo e os tokens.
+
+### Modelos de dados do modo completo
+
+```python
+class PlannedModule(BaseModel):
+    module_path: str
+    task: str
+    depends_on: list[str] = []
+
+class Plan(BaseModel):
+    feature: str
+    modules: list[PlannedModule]
+
+class IntegrationVerdict(BaseModel):
+    approved: bool
+    failing_module: str | None = None
+    traceback_summary: str | None = None
+    feedback_for_coder: str | None = None
+
+class FeatureResult(BaseModel):
+    status: Literal["approved", "partial", "plan_failed"]
+    plan: Plan
+    modules: list[ModuleOutcome]
+    history: list[AgentLogEntry]
+    integration_attempts: int
+    total_tokens: int
+    latency_seconds: float
+    written_to: list[str]
+```
 
 ## 4. Como rodar
 
@@ -193,7 +265,7 @@ Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta con
 devsquad build-feature "<feature em linguagem natural>" [opções]
 ```
 
-Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encaixam), não um módulo isolado. Arquitetura completa em [`docs/architect-v2.md`](docs/architect-v2.md).
+Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encaixam), não um módulo isolado — ver arquitetura completa na seção 3.
 
 | Flag | Obrigatório? | Exemplo | O que faz |
 |---|---|---|---|
@@ -270,6 +342,11 @@ Taxa de sucesso: **100%** (6/6) · Média de iterações até passar: **1.3** ·
 - **Por que cliente compatível com OpenAI em vez de SDK nativo de cada provedor:** permite trocar de provedor só mudando `LLM_BASE_URL`/`LLM_MODEL`, sem reescrever código — inclusive para endpoints locais.
 - **Por que executar os testes de verdade (e não só pedir pro QA "revisar" o código):** um LLM julgando código visualmente erra; rodar pytest de fato dá um veredito objetivo e verificável.
 - **Limites do sandbox atual:** subprocess isolado com timeout e sem variáveis sensíveis reduz risco, mas não é isolamento completo de SO/filesystem/rede. Próximo passo natural é rodar em container descartável (`SANDBOX=docker`, se der tempo).
+- **Por que o modo completo reaproveita o loop interno em vez de reescrever tudo:** `build-feature` não é um sistema paralelo — ele chama exatamente o mesmo código de `devsquad run` uma vez por módulo. Menos código pra manter, e qualquer melhoria no loop interno beneficia os dois modos.
+- **Mais tokens e tempo por feature:** cada módulo ainda passa pelo loop Refiner→Coder→QA completo; uma feature de 4 módulos custa ~4x o que um `devsquad run` custa hoje, mais o Integration QA.
+- **Architect pode planejar mal:** se ele dividir os módulos de um jeito estranho (acoplamento errado, dependência circular), o problema só aparece no Integration QA, não antes — é o trade-off de planejar antes de executar.
+- **Fix de integração é de 1 módulo por vez:** se o problema real envolve dois módulos ao mesmo tempo, pode levar mais de uma rodada de `--max-integration-iterations` pra convergir, ou nunca convergir (daí o `status: partial`).
+- **QA de módulo não testa integração entre módulos ainda não escritos:** como cada módulo é gerado e testado isoladamente (sandbox só com `solution.py`/`test_solution.py`), o QA individual não detecta um bug que só se manifesta quando dois módulos interagem de verdade — exatamente o papel que o Integration QA cobre depois. Isso apareceu nos próprios testes do projeto: um módulo com lógica errada passou pelo QA individual, e só o Integration QA (rodando um teste real que importa os dois módulos juntos) encontrou o problema e mandou corrigir.
 
 ## 8. Próximos passos
 
@@ -277,4 +354,4 @@ Taxa de sucesso: **100%** (6/6) · Média de iterações até passar: **1.3** ·
 - Agente `Docs` (gera docstrings/README do módulo/feature).
 - Cache de respostas do LLM entre iterações.
 - UI simples para acompanhar o grafo em execução.
-- `build-feature`: permitir que módulos gerados importem uns aos outros de verdade durante o teste unitário próprio (hoje cada módulo é testado isolado; só o Integration QA testa a composição real — ver limites em [`docs/architect-v2.md`](docs/architect-v2.md)).
+- `build-feature`: permitir que módulos gerados importem uns aos outros de verdade durante o teste unitário próprio (hoje cada módulo é testado isolado; só o Integration QA testa a composição real).
