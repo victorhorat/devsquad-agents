@@ -240,7 +240,7 @@ devsquad run "cria uma funcao de busca no cardapio, recebendo a lista de itens e
 devsquad eval
 ```
 
-Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta contra o provedor configurado no `.env`, imprime o resultado no terminal e grava a tabela em `evals/results.md` (ver seção 5).
+Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta contra o provedor configurado no `.env`, imprime o resultado no terminal e grava a tabela em `evals/results.md`.
 
 ### `devsquad build-feature`
 
@@ -302,24 +302,7 @@ curl -X POST http://localhost:8000/tasks \
 }
 ```
 
-## 5. Resultados das evals
-
-`devsquad eval` roda as tarefas de `src/devsquad/evals.py` de ponta a ponta e grava a tabela em `evals/results.md`. Último run real (sem nenhuma edição manual):
-
-**Resultados das evals (2026-11-04, modelo: `openai/gpt-oss-120b` via Groq)**
-
-Taxa de sucesso: **100%** (6/6) · Média de iterações até passar: **1.3** · Média de tokens por tarefa: **5288** · Média de latência por tarefa: **30.8s**
-
-| Tarefa | Status | Iterações | Tokens | Latência (s) |
-|---|---|---|---|---|
-| validar_cpf | ✅ | 2 | 6339 | 10.26 |
-| parse_preco_brl | ✅ | 2 | 10700 | 72.78 |
-| taxa_entrega | ✅ | 1 | 3146 | 23.46 |
-| agrupar_pedidos_por_restaurante | ✅ | 1 | 4011 | 26.58 |
-| paginar_lista | ✅ | 1 | 3676 | 24.17 |
-| validar_email | ✅ | 1 | 3858 | 27.82 |
-
-## 6. Próximos passos
+## 5. Próximos passos
 
 - Sandbox real em container descartável.
 - Agente `Docs` (gera docstrings/README do módulo/feature).
