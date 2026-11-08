@@ -27,12 +27,7 @@ Latência: 11.2s
 
 ## 2. Por que existe
 
-Fiz este projeto para o meu portfólio de IA Generativa. Mas ele não é só uma demo: é a ferramenta que eu uso para construir os próximos dois projetos do portfólio, apontando o `--workspace` para as pastas deles.
-
-- `[em breve: link para o agente de pedidos de comida]`
-- `[em breve: link para o RAG de avaliações de restaurantes]`
-
-📄 Exemplos reais de uso, com comando, o que foi passado pro agente e o que ele decidiu sozinho: [`docs/exemplos-reais.md`](docs/exemplos-reais.md).
+Fiz este projeto para o meu portfólio de IA Generativa: mostrar um sistema multi-agente de verdade, com loop de autocorreção testado de ponta a ponta, não só uma demo que gera texto. Ele foi pensado desde o início pra também servir como ferramenta de desenvolvimento — rodando contra o `--workspace` de qualquer projeto Python real — não só como vitrine.
 
 ## 3. Arquitetura
 
@@ -239,11 +234,11 @@ devsquad run "<tarefa em linguagem natural>" [opções]
 | Flag | Obrigatório? | Exemplo | O que faz |
 |---|---|---|---|
 | `<tarefa>` (argumento posicional) | **Sim** | `"funcao que valida CPF"` | Descrição da tarefa. Pode ser técnica (com assinatura) ou totalmente casual — o Refiner estrutura isso de qualquer forma; quanto mais vago, mais decisões de nome/formato ficam a critério do Refiner/Coder. |
-| `--workspace` | Não | `--workspace ../food-order-agent` | Pasta do projeto onde gravar o resultado, se aprovado. Sem essa flag, o código só aparece na saída do terminal, não é gravado em disco. |
-| `--module` | Só se usar `--workspace` | `--module src/foodagent/cart.py` | Caminho (relativo ao `--workspace`) de onde gravar o módulo. Sem ele, mesmo com `--workspace`, nada é gravado. |
+| `--workspace` | Não | `--workspace ../outro-projeto` | Pasta do projeto onde gravar o resultado, se aprovado. Sem essa flag, o código só aparece na saída do terminal, não é gravado em disco. |
+| `--module` | Só se usar `--workspace` | `--module src/cart.py` | Caminho (relativo ao `--workspace`) de onde gravar o módulo. Sem ele, mesmo com `--workspace`, nada é gravado. |
 | `--max-iterations` | Não (padrão `3`) | `--max-iterations 5` | Quantas vezes o loop Coder↔QA tenta corrigir antes de desistir. |
-| `--context` | Não | `--context ../food-order-agent/src/foodagent/cart.py` | Um arquivo existente a dar como referência de estilo/convenção. Repita a flag pra vários arquivos. Por padrão, `devsquad run` **não sabe nada** do que já existe no workspace — isso é o único jeito manual de contar pra ele. |
-| `--context-dir` | Não | `--context-dir ../food-order-agent/src/foodagent` | Mesma ideia do `--context`, mas pega todos os `.py` de uma pasta de uma vez (ignora `test_*.py`). Repita pra várias pastas. |
+| `--context` | Não | `--context ../outro-projeto/src/cart.py` | Um arquivo existente a dar como referência de estilo/convenção. Repita a flag pra vários arquivos. Por padrão, `devsquad run` **não sabe nada** do que já existe no workspace — isso é o único jeito manual de contar pra ele. |
+| `--context-dir` | Não | `--context-dir ../outro-projeto/src` | Mesma ideia do `--context`, mas pega todos os `.py` de uma pasta de uma vez (ignora `test_*.py`). Repita pra várias pastas. |
 | `--no-readme-context` | Não (desligado por padrão) | `--no-readme-context` | Por padrão, se `--workspace` é usado e existe um `README.md` na raiz dele, esse README **entra automaticamente como contexto** (é onde normalmente estão as convenções e decisões de domínio). Essa flag desliga esse comportamento. |
 | `--write-on-fail` | Não | `--write-on-fail` | Grava no workspace mesmo se o QA **não** aprovar (por padrão, só grava quando aprovado). Útil pra inspecionar uma tentativa que não passou. |
 | `--verbose` / `-v` | Não | `--verbose` | Mostra o output completo de cada agente — a `Spec` inteira do Refiner, o código+testes completos do Coder, o `Verdict` inteiro do QA — em vez de só o resumo de uma linha. |
@@ -258,9 +253,9 @@ devsquad run "função que valida CPF com dígitos verificadores"
 
 ```bash
 devsquad run "cria uma funcao de busca no cardapio, recebendo a lista de itens e um texto digitado pelo usuario" \
-  --workspace ../food-order-agent \
-  --module src/foodagent/catalog.py \
-  --context-dir ../food-order-agent/src/foodagent \
+  --workspace ../outro-projeto \
+  --module src/catalog.py \
+  --context-dir ../outro-projeto/src \
   --max-iterations 5
 ```
 
@@ -283,7 +278,7 @@ Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encai
 | Flag | Obrigatório? | Exemplo | O que faz |
 |---|---|---|---|
 | `<feature>` (argumento posicional) | **Sim** | `"carrinho de compras com busca no cardapio"` | Descrição da feature. O Architect quebra isso em um plano de módulos — você não escolhe os caminhos de arquivo aqui. |
-| `--workspace` | Não | `--workspace ../food-order-agent` | Pasta do projeto onde gravar todos os módulos gerados (aprovados ou não — hoje `build-feature` não tem um `--write-on-fail`, sempre grava o que foi produzido). |
+| `--workspace` | Não | `--workspace ../outro-projeto` | Pasta do projeto onde gravar todos os módulos gerados (aprovados ou não — hoje `build-feature` não tem um `--write-on-fail`, sempre grava o que foi produzido). |
 | `--max-module-iterations` | Não (padrão `3`) | `--max-module-iterations 5` | Mesmo que `--max-iterations` do `devsquad run`, mas aplicado a cada módulo do plano individualmente. |
 | `--max-integration-iterations` | Não (padrão `2`) | `--max-integration-iterations 3` | Quantas vezes o Integration QA pode apontar um módulo pra corrigir antes de devolver `status: partial`. |
 | `--context` / `--context-dir` / `--no-readme-context` | Não | iguais ao `devsquad run` | Mesmo mecanismo de contexto, aplicado ao Architect e a cada módulo do plano. |
@@ -293,8 +288,8 @@ Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encai
 
 ```bash
 devsquad build-feature "carrinho de compras que busca itens no cardapio, adiciona ao carrinho e calcula o total com taxa de entrega" \
-  --workspace ../food-order-agent \
-  --context-dir ../food-order-agent/src/foodagent
+  --workspace ../outro-projeto \
+  --context-dir ../outro-projeto/src
 ```
 
 Saída inclui o plano do Architect, o histórico de cada módulo (Refiner/Coder/QA) e do Integration QA, e o status final: `approved` (tudo passou, inclusive integração), ou `partial` (módulos individuais passaram, mas a integração não fechou dentro do orçamento de tentativas).
