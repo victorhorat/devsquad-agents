@@ -2,22 +2,18 @@
 
 ## 1. O que é
 
-Um "time de desenvolvimento" de agentes de IA: você descreve uma tarefa em português natural, e três agentes especializados (Refiner, Coder, QA) colaboram em loop até entregar código Python com testes reais passando.
+Um "time de desenvolvimento" de agentes de IA: você descreve uma tarefa em português natural, e três agentes especializados (Refiner, Coder, QA) colaboram em loop até entregar código Python com testes reais passando. Cada iteração é validada rodando pytest de verdade num subprocess isolado — não um LLM "revisando" o próprio código — e o loop só termina quando os testes passam ou o limite de tentativas é atingido, então o resultado final sempre tem um status verificável, nunca uma suposição.
 
-## 2. Por que existe
+## 2. Arquitetura
 
-Gerar código funcional com um LLM é fácil; garantir que ele está correto é o problema real. O `devsquad-agents` resolve isso com verificação objetiva: cada iteração do Coder é validada rodando pytest de verdade num subprocess isolado, não por um LLM "revisando" o próprio código. O loop Coder↔QA só termina quando os testes passam ou o limite de tentativas é atingido — o resultado final sempre tem um status verificável, nunca uma suposição.
-
-## 3. Arquitetura
-
-O projeto tem dois modos, do mais simples ao mais completo, documentados em blocos separados abaixo. Os dois usam o mesmo motor por baixo (nenhum código duplicado): o modo completo (3.2) só adiciona duas camadas em volta do modo simples (3.1).
+O projeto tem dois modos, do mais simples ao mais completo, documentados em blocos separados abaixo. Os dois usam o mesmo motor por baixo (nenhum código duplicado): o modo completo (2.2) só adiciona duas camadas em volta do modo simples (2.1).
 
 - **`devsquad run`** — um módulo por vez. Três agentes (Refiner, Coder, QA) em loop até o código passar nos testes de verdade.
 - **`devsquad build-feature`** *(modo completo, dá pra construir uma funcionalidade inteira)* — um Architect planeja vários módulos, cada um passa pelo loop do modo simples sem nenhuma mudança, e um Integration QA testa os módulos juntos no final, corrigindo o módulo certo se algo não se encaixar.
 
 ---
 
-### 3.1 Modo simples — `devsquad run`
+### 2.1 Modo simples — `devsquad run`
 
 **Visão geral**
 
@@ -70,7 +66,7 @@ Coder → Test Runner → QA
 
 ---
 
-### 3.2 Modo completo — `devsquad build-feature`
+### 2.2 Modo completo — `devsquad build-feature`
 
 **Visão geral**
 
@@ -84,7 +80,7 @@ flowchart TD
 
     subgraph ModuleLoop["por módulo do plano, em ordem"]
         direction TB
-        Inner["Refiner → Coder → QA\n(o loop do modo simples, 3.1, sem mudança)"]
+        Inner["Refiner → Coder → QA\n(o loop do modo simples, 2.1, sem mudança)"]
     end
 
     ModuleLoop -->|todos os módulos aprovados| Integration
@@ -102,14 +98,14 @@ flowchart TD
 | Componente | Responsabilidade |
 |---|---|
 | **Architect** | Recebe a feature + contexto do workspace (README + `--context-dir`) e produz um `Plan`: lista ordenada de módulos, cada um com sua tarefa e os contratos (assinaturas) que módulos anteriores do plano expõem. |
-| **Module Loop** | Roda o loop do modo simples (3.1) uma vez por módulo do plano, na ordem de dependência. Cada módulo aprovado entra como contexto dos módulos seguintes. |
+| **Module Loop** | Roda o loop do modo simples (2.1) uma vez por módulo do plano, na ordem de dependência. Cada módulo aprovado entra como contexto dos módulos seguintes. |
 | **Integration QA** | Só roda depois que todos os módulos passaram individualmente. Gera um teste de integração que importa os módulos pelos nomes de arquivo reais e roda via `pytest` (mesmo Test Runner do modo simples, estendido pra múltiplos arquivos). Se falhar, aponta qual módulo é a causa raiz. |
 | **Fix (Coder focado)** | Reaproveita direto o Coder do módulo apontado, com o feedback do Integration QA — sem rodar o Refiner de novo nem refazer os outros módulos. |
 
 **Fluxo de dados**
 
 1. Architect(`feature`, contexto) → `Plan` (lista de `PlannedModule`, cada um com `task` e `depends_on`).
-2. Pra cada módulo do plano, nessa ordem: roda o fluxo do modo simples (3.1), usando o código dos módulos já aprovados como contexto do próximo.
+2. Pra cada módulo do plano, nessa ordem: roda o fluxo do modo simples (2.1), usando o código dos módulos já aprovados como contexto do próximo.
 3. Com todos os módulos aprovados: Integration QA gera um teste que importa os módulos de verdade e roda via Test Runner (multi-arquivo).
 4. Se aprovado → `status: approved`. Se não, e ainda há orçamento (`--max-integration-iterations`): identifica o módulo culpado (`IntegrationVerdict.failing_module`), roda o Coder só nesse módulo com o feedback da falha, e repete o passo 3.
 5. Se esgotar o orçamento sem aprovar → `status: partial`. Grava no `--workspace` todos os módulos gerados (aprovados ou não), e retorna o plano, cada módulo, o histórico completo e os tokens.
@@ -148,7 +144,7 @@ class FeatureResult(BaseModel):
 
 ---
 
-## 4. Como rodar
+## 3. Como rodar
 
 ```bash
 # instalação local (uv)
@@ -202,7 +198,7 @@ docker compose up --build
 
 O `Dockerfile` é multi-stage: builda as dependências com `uv` num estágio e copia só o `.venv` + `src/` para a imagem final.
 
-## 5. CLI e API
+## 4. CLI e API
 
 ### `devsquad run`
 
@@ -244,7 +240,7 @@ devsquad run "cria uma funcao de busca no cardapio, recebendo a lista de itens e
 devsquad eval
 ```
 
-Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta contra o provedor configurado no `.env`, imprime o resultado no terminal e grava a tabela em `evals/results.md` (ver seção 6).
+Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta contra o provedor configurado no `.env`, imprime o resultado no terminal e grava a tabela em `evals/results.md` (ver seção 5).
 
 ### `devsquad build-feature`
 
@@ -252,7 +248,7 @@ Sem flags. Roda as tarefas fixas de `src/devsquad/evals.py` de ponta a ponta con
 devsquad build-feature "<feature em linguagem natural>" [opções]
 ```
 
-Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encaixam), não um módulo isolado — ver arquitetura completa na seção 3.
+Pra quando o pedido já é uma **funcionalidade** (vários módulos que se encaixam), não um módulo isolado — ver arquitetura completa na seção 2.
 
 | Flag | Obrigatório? | Exemplo | O que faz |
 |---|---|---|---|
@@ -306,7 +302,7 @@ curl -X POST http://localhost:8000/tasks \
 }
 ```
 
-## 6. Resultados das evals
+## 5. Resultados das evals
 
 `devsquad eval` roda as tarefas de `src/devsquad/evals.py` de ponta a ponta e grava a tabela em `evals/results.md`. Último run real (sem nenhuma edição manual):
 
@@ -323,7 +319,7 @@ Taxa de sucesso: **100%** (6/6) · Média de iterações até passar: **1.3** ·
 | paginar_lista | ✅ | 1 | 3676 | 24.17 |
 | validar_email | ✅ | 1 | 3858 | 27.82 |
 
-## 7. Próximos passos
+## 6. Próximos passos
 
 - Sandbox real em container descartável.
 - Agente `Docs` (gera docstrings/README do módulo/feature).
