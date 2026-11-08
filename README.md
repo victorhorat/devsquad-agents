@@ -1,9 +1,5 @@
 # devsquad-agents
 
-> **EN summary:** A small multi-agent dev team (Refiner → Coder → QA) built with LangGraph that turns a natural-language task into tested Python code. Runs real pytest in an isolated subprocess, loops Coder↔QA until green, and works against any OpenAI-compatible LLM endpoint (Gemini free tier by default). Ships as a CLI and a FastAPI service, with eval benchmarks tracking success rate, iterations, tokens and latency.
-
----
-
 ## 1. O que é
 
 Um "time de desenvolvimento" de agentes de IA: você descreve uma tarefa em português natural, e três agentes especializados (Refiner, Coder, QA) colaboram em loop até entregar código Python com testes reais passando.
