@@ -8,24 +8,6 @@
 
 Um "time de desenvolvimento" de agentes de IA: você descreve uma tarefa em português natural, e três agentes especializados (Refiner, Coder, QA) colaboram em loop até entregar código Python com testes reais passando.
 
-```
-$ devsquad run "funcao que valida CPF brasileiro com digitos verificadores"
-
-Tarefa: funcao que valida CPF brasileiro com digitos verificadores
-
-🧭 Refiner (iter 0): implementar uma função que valida números de CPF
-brasileiro, verificando corretamente os dígitos verificadores.
-👩‍💻 Coder (iter 1): implementado o algoritmo padrão de validação de CPF,
-tratando formatação, entradas não-string, checagem de tamanho e o caso de
-todos os dígitos iguais.
-🔍 QA (iter 1): aprovado
-
-✅ Aprovado
-Iterações: 1
-Tokens totais: 3107
-Latência: 11.2s
-```
-
 ## 2. Por que existe
 
 Gerar código funcional com um LLM é fácil; garantir que ele está correto é o problema real. O `devsquad-agents` resolve isso com verificação objetiva: cada iteração do Coder é validada rodando pytest de verdade num subprocess isolado, não por um LLM "revisando" o próprio código. O loop Coder↔QA só termina quando os testes passam ou o limite de tentativas é atingido — o resultado final sempre tem um status verificável, nunca uma suposição.
